@@ -167,9 +167,15 @@ def itjobs(query, since, today):
 # ---------------- net-empregos.com ----------------
 def netempregos(params, since):
     out, page = [], 1
-    while page <= 60:
-        h = fetch(f"https://www.net-empregos.com/pesquisa-empregos.asp?page={page}&chaves=&{params}", encoding="latin-1")
-        items = re.split(r'<div class="job-item media">', h)[1:]
+    while page <= 200:
+        url = f"https://www.net-empregos.com/pesquisa-empregos.asp?page={page}&chaves=&{params}"
+        for attempt in range(3):
+            h = fetch(url, encoding="latin-1")
+            items = re.split(r'<div class="job-item media">', h)[1:]
+            if items or "pesquisa-empregos" not in h:  # real empty page vs. blocked/partial response
+                break
+            print(f"WARN net-empregos: sem ofertas na página {page}, nova tentativa", file=sys.stderr)
+            time.sleep(15)
         if not items:
             break
         older = 0
@@ -219,6 +225,11 @@ def collect(days):
     for j in netempregos("cidade=&categoria=0&zona=0&tipo=4", since):
         j["reason"] = "Teletrabalho"
         jobs.append(j)
+    for src in ("itjobs.pt", "net-empregos.com"):
+        n = sum(j["source"] == src for j in jobs)
+        SOURCE_STATS[src] = (n, n, 0)
+        if n == 0:
+            print(f"WARN {src}: 0 ofertas", file=sys.stderr)
     jobs += collect_extra(since, today)
     seen, result = set(), []
     for j in jobs:
@@ -288,8 +299,8 @@ def render(jobs, since, today):
         lines.append("Sem ofertas novas esta semana.")
     if SOURCE_STATS:
         stats = "; ".join(f"{n}: {got} recolhidas/{kept} na zona" + (" (FALHOU?)" if got == 0 else "") for n, (got, kept, _) in SOURCE_STATS.items())
-        rows_html.append(f'<p style="color:#777;font-size:12px">Fontes extra — {html.escape(stats)}</p>')
-        lines.append("Fontes extra — " + stats)
+        rows_html.append(f'<p style="color:#777;font-size:12px">Fontes — {html.escape(stats)}</p>')
+        lines.append("Fontes — " + stats)
     body_html = (f'<div style="font:14px Arial,sans-serif"><h2>{html.escape(subject)}</h2>'
                  f'<p>Critérios: Coimbra (raio ≤ {MAX_KM} km) ou 100% remoto/teletrabalho, com pelo menos uma das palavras: '
                  f'{html.escape(", ".join(k for k, _ in KEYWORDS))}.</p>{"".join(rows_html)}</div>')
