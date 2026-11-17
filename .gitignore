@@ -1,0 +1,4 @@
+digest.*
+run.*
+__pycache__/
+NOTES.md
